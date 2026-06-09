@@ -6,7 +6,7 @@
 // dashboard keeps working while Hermes is offline.
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { log } from "./logger";
 
@@ -35,11 +35,23 @@ type HermesDashboardState = Partial<EmailBlock> & {
   last_updated?: string;
 };
 
+type DashboardAction = {
+  type: "mark_read";
+  created_at: string;
+  scope: "dashboard_important";
+  email_count: number;
+  subjects: string[];
+};
+
 const STATE_FILE = resolve(
   process.env.HERMES_DASHBOARD_STATE ?? `${homedir()}/.hermes/dashboard/state.json`,
 );
 
 const MAX_ITEMS = Number(process.env.EMAIL_MAX_SHOW ?? 5);
+
+const ACTIONS_DIR = resolve(
+  process.env.HERMES_DASHBOARD_ACTIONS_DIR ?? join(dirname(STATE_FILE), "actions"),
+);
 
 function fallbackBlock(message = "BMO ainda nao encontrou emails importantes."): EmailBlock {
   return {
@@ -123,18 +135,33 @@ export async function getEmailBlock(): Promise<EmailBlock> {
   }
 }
 
-// The ESP32's "Ler todas" button cannot safely mark Gmail directly. Instead it
-// acknowledges the dashboard by zeroing the local state. Hermes's next triage run
-// will repopulate it if there are still important unread emails.
+async function writeJsonAtomic(path: string, value: unknown): Promise<void> {
+  const tmp = `${path}.tmp`;
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(tmp, JSON.stringify(value, null, 2), "utf8");
+  await rename(tmp, path);
+}
+
+// The ESP32's "Ler todas" button should be handled by BMO/Hermes on the host,
+// where the Gmail credentials and email CLI live. This API only writes a small
+// action request into the shared dashboard directory. A host-side cron consumes
+// it, marks matching dashboard emails as read, and then updates state.json.
 export async function markAllRead(): Promise<EmailBlock> {
-  const block = fallbackBlock("Tudo lido no dashboard. BMO vai verificar de novo em breve.");
-  const payload = JSON.stringify({ ...block, last_updated: new Date().toISOString() }, null, 2);
-  const tmp = `${STATE_FILE}.tmp`;
-  await mkdir(dirname(STATE_FILE), { recursive: true });
-  await writeFile(tmp, payload, "utf8");
-  await rename(tmp, STATE_FILE);
-  log.info("EMAIL", `acknowledged dashboard emails in ${dirname(STATE_FILE)}`);
+  const current = await getEmailBlock();
+  const action: DashboardAction = {
+    type: "mark_read",
+    created_at: new Date().toISOString(),
+    scope: "dashboard_important",
+    email_count: current.email.latest.length,
+    subjects: current.email.latest.map((item) => item.subject).filter(Boolean),
+  };
+  await writeJsonAtomic(join(ACTIONS_DIR, "mark-read.json"), action);
+
+  const block = fallbackBlock("BMO recebeu o pedido e vai marcar esses emails como lidos.");
+  await writeJsonAtomic(STATE_FILE, { ...block, last_updated: new Date().toISOString() });
+  log.info("EMAIL", `queued mark-read action in ${ACTIONS_DIR}`);
   return block;
 }
 
 export const dashboardStateFile = STATE_FILE;
+export const dashboardActionsDir = ACTIONS_DIR;

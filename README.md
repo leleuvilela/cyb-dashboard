@@ -60,9 +60,24 @@ shown in `api/hermes-state.example.json`:
 ```
 
 If the state file is missing or invalid, the ESP32 still receives a safe
-"nothing urgent" block. The `Ler todas` button acknowledges the dashboard by
-zeroing this local state file; BMO's next triage run will repopulate it if
-important unread emails still exist.
+"nothing urgent" block. The `Ler todas` button writes an action request for BMO
+instead of touching Gmail inside the Coolify container. By default the request is
+written to:
+
+```sh
+/home/leleu/.hermes/dashboard/actions/mark-read.json
+```
+
+When deploying in Coolify, mount the host dashboard directory into the container
+and point the env vars at the mounted paths, for example:
+
+```env
+HERMES_DASHBOARD_STATE=/data/hermes-dashboard/state.json
+HERMES_DASHBOARD_ACTIONS_DIR=/data/hermes-dashboard/actions
+```
+
+BMO/Hermes consumes the action request on the host, uses the normal email tools
+to mark the dashboard emails as read, then refreshes the state file.
 
 ## Notes
 - ESP32 is 2.4GHz WiFi only.
