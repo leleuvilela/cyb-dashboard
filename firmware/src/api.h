@@ -5,9 +5,6 @@
 // Real path: HTTP GET API_BASE+API_PATH, parse JSON. Blocking.
 DashboardData api_fetch();
 
-// Fetch ONLY the email block (GET API_BASE/emails).
-EmailInfo api_fetch_emails();
-
 // Request a re-triage (POST API_BASE/emails/refresh -> writes refresh.json),
 // returns the current block. Used by pull-to-refresh / refresh button.
 EmailInfo api_request_refresh();

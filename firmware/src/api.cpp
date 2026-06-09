@@ -46,11 +46,6 @@ DashboardData api_fetch() {
     return d;
 }
 
-EmailInfo api_fetch_emails() {
-    static int seed = 0;
-    return mock_emails(++seed);   // rotate so manual refresh visibly changes
-}
-
 EmailInfo api_request_refresh() {
     static int seed = 1000;
     return mock_emails(++seed);   // mock: same as fetch, just rotates
@@ -73,8 +68,6 @@ EmailInfo api_mark_all_read() {
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include "log.h"
-
-static const char *icon_norm(const char *s) { return s ? s : "clear"; }
 
 // Parse the { "email": {...}, "bmo": {...} } block shared by both routes.
 static EmailInfo parse_email_block(JsonObject root) {
@@ -112,6 +105,7 @@ static bool http_get_json(const char *tag, const String &url, JsonDocument &doc)
     }
     LOGD(tag, "GET %s", url.c_str());
     HTTPClient http;
+    http.useHTTP10(true);   // no chunked encoding — getStream() feeds deserializeJson raw
     http.begin(url);
     http.setTimeout(8000);
     int code = http.GET();
@@ -143,18 +137,11 @@ DashboardData api_fetch() {
         d.weather.temp_max = w["temp_max"] | 0.0f;
         d.weather.humidity = w["humidity"] | 0;
         d.weather.desc = String((const char *)(w["desc"] | ""));
-        d.weather.icon = String(icon_norm(w["icon"] | "clear"));
+        d.weather.icon = String((const char *)(w["icon"] | "clear"));
     }
     d.email = parse_email_block(doc.as<JsonObject>());
     d.ok = true;
     return d;
-}
-
-EmailInfo api_fetch_emails() {
-    EmailInfo e;
-    JsonDocument doc;
-    if (!http_get_json("EMAIL", String(API_BASE) + "/emails", doc)) return e;
-    return parse_email_block(doc.as<JsonObject>());
 }
 
 // POST (empty body) to url, parse the returned email block. Logged under tag.
@@ -166,6 +153,7 @@ static EmailInfo http_post_block(const char *tag, const String &url) {
     }
     LOGD(tag, "POST %s", url.c_str());
     HTTPClient http;
+    http.useHTTP10(true);   // no chunked encoding — getStream() feeds deserializeJson raw
     http.begin(url);
     http.setTimeout(8000);
     int code = http.POST((uint8_t *)nullptr, 0);

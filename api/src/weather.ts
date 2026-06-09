@@ -28,7 +28,14 @@ function mapCode(code: number): { icon: string; desc: string } {
   return { icon: "clouds", desc: "unknown" };
 }
 
+// Cache so the ESP32's 60s /dashboard poll doesn't hit Open-Meteo every time,
+// and a slow/failed upstream doesn't stall the device (stale data served on error).
+const CACHE_MS = Number(process.env.WEATHER_CACHE_MS ?? 10 * 60 * 1000);
+let cache: { at: number; data: Weather } | null = null;
+
 export async function getWeather(): Promise<Weather | null> {
+  if (cache && Date.now() - cache.at < CACHE_MS) return cache.data;
+
   const lat = process.env.LAT ?? "38.7223";
   const lon = process.env.LON ?? "-9.1393";
   const unit = process.env.TEMP_UNIT ?? "celsius";
@@ -44,17 +51,13 @@ export async function getWeather(): Promise<Weather | null> {
     const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
     if (!res.ok) {
       log.error("WEATHER", `open-meteo HTTP ${res.status}`);
-      return null;
+      return cache?.data ?? null;
     }
     const j: any = await res.json();
     const c = j.current;
     const d = j.daily ?? {};
     const { icon, desc } = mapCode(c.weather_code);
-    log.info(
-      "WEATHER",
-      `${desc} ${c.temperature_2m}° (min ${d.temperature_2m_min?.[0]} / max ${d.temperature_2m_max?.[0]}, ${c.relative_humidity_2m}%) in ${(performance.now() - t0).toFixed(0)}ms`,
-    );
-    return {
+    const data: Weather = {
       temp: c.temperature_2m,
       feels: c.apparent_temperature,
       temp_min: d.temperature_2m_min?.[0] ?? c.temperature_2m,
@@ -63,8 +66,18 @@ export async function getWeather(): Promise<Weather | null> {
       desc,
       icon,
     };
+    cache = { at: Date.now(), data };
+    log.info(
+      "WEATHER",
+      `${desc} ${c.temperature_2m}° (min ${d.temperature_2m_min?.[0]} / max ${d.temperature_2m_max?.[0]}, ${c.relative_humidity_2m}%) in ${(performance.now() - t0).toFixed(0)}ms`,
+    );
+    return data;
   } catch (err) {
     log.error("WEATHER", "fetch failed", err);
+    if (cache) {
+      log.warn("WEATHER", `serving stale cache (${Math.round((Date.now() - cache.at) / 1000)}s old)`);
+      return cache.data;
+    }
     return null;
   }
 }

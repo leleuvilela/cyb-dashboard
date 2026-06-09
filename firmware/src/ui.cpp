@@ -10,14 +10,23 @@ LV_FONT_DECLARE(font_accent_16);
 #define SYM_ROBOT "\xEF\x95\x84"   // FontAwesome fa-robot (U+F544)
 
 // ---- palette: Catppuccin Mocha ----
-#define COL_BG lv_color_hex(0x1e1e2e)     // base
-#define COL_CARD lv_color_hex(0x313244)   // surface0
-#define COL_TEXT lv_color_hex(0xcdd6f4)   // text
-#define COL_MUTED lv_color_hex(0x7f849c)  // overlay1
-#define COL_ACCENT lv_color_hex(0x89b4fa) // blue
-#define COL_OK lv_color_hex(0xa6e3a1)     // green
-#define COL_ATTN lv_color_hex(0xf9e2af)   // yellow
-#define COL_URGENT lv_color_hex(0xf38ba8) // red
+// hex values shared by lv_color_hex() and label recolor strings (fmt_counts)
+#define HEX_BG     0x1e1e2e  // base
+#define HEX_CARD   0x313244  // surface0
+#define HEX_TEXT   0xcdd6f4  // text
+#define HEX_MUTED  0x7f849c  // overlay1
+#define HEX_ACCENT 0x89b4fa  // blue
+#define HEX_OK     0xa6e3a1  // green
+#define HEX_ATTN   0xf9e2af  // yellow
+#define HEX_URGENT 0xf38ba8  // red
+#define COL_BG lv_color_hex(HEX_BG)
+#define COL_CARD lv_color_hex(HEX_CARD)
+#define COL_TEXT lv_color_hex(HEX_TEXT)
+#define COL_MUTED lv_color_hex(HEX_MUTED)
+#define COL_ACCENT lv_color_hex(HEX_ACCENT)
+#define COL_OK lv_color_hex(HEX_OK)
+#define COL_ATTN lv_color_hex(HEX_ATTN)
+#define COL_URGENT lv_color_hex(HEX_URGENT)
 
 static lv_color_t bmo_color(const char *status) {
   if (!status)
@@ -34,10 +43,11 @@ static lv_color_t bmo_color(const char *status) {
 // counts label (recolored): grey envelope=all, green=important, red=urgent
 static void fmt_counts(char *b, size_t n, const EmailInfo &e) {
   snprintf(b, n,
-           "#7f849c " LV_SYMBOL_ENVELOPE " %d#    "
-           "#a6e3a1 " LV_SYMBOL_ENVELOPE " %d#    "
-           "#f38ba8 " LV_SYMBOL_ENVELOPE " %d#",
-           e.count, e.important_count, e.urgent_count);
+           "#%06x " LV_SYMBOL_ENVELOPE " %d#    "
+           "#%06x " LV_SYMBOL_ENVELOPE " %d#    "
+           "#%06x " LV_SYMBOL_ENVELOPE " %d#",
+           HEX_MUTED, e.count, HEX_OK, e.important_count,
+           HEX_URGENT, e.urgent_count);
 }
 
 // ---- screens ----

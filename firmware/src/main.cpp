@@ -48,6 +48,7 @@ static void refresh_data() {
     uint32_t t0 = millis();
     DashboardData d = api_fetch();
     if (d.ok) {
+        last_emails = d.email;   // keep cache fresh so failed manual actions restore real data
         ui_set_data(d);
         LOGI("API", "ok in %lums: %s %.1f°, %d latest (%d imp/%d urg)",
              (unsigned long)(millis() - t0),
@@ -87,7 +88,7 @@ void loop() {
     display_tick();
 
     // keep WiFi alive (non-blocking); detect up<->down transitions
-    static bool prev_up = false;
+    static bool prev_up = true;   // setup() already fetched — avoid double fetch on first loop
     bool up = wifi_loop();
     if (up && !prev_up) {
         // came back online — refresh immediately instead of waiting for tick

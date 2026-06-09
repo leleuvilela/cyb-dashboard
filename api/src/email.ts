@@ -141,7 +141,7 @@ export async function getEmailBlock(): Promise<EmailBlock> {
 }
 
 async function writeJsonAtomic(path: string, value: unknown): Promise<void> {
-  const tmp = `${path}.tmp`;
+  const tmp = `${path}.${process.pid}.${Date.now()}.tmp`;   // unique per write — no concurrent collisions
   await mkdir(dirname(path), { recursive: true });
   await writeFile(tmp, JSON.stringify(value, null, 2), "utf8");
   await rename(tmp, path);

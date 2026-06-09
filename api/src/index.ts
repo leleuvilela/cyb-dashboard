@@ -14,10 +14,10 @@ app.onError((err, c) => {
 
 app.get("/health", (c) => c.json({ ok: true }));
 
-// Emails only — for on-device pull-to-refresh. Returns { email, bmo }.
+// Emails only — current { email, bmo } block (debug/curl; device uses POST /emails/refresh).
 app.get("/emails", async (c) => {
   const block = await getEmailBlock();
-  log.info("EMAIL", `manual refresh -> ${block.email.latest.length} latest, status=${block.bmo.status}`);
+  log.info("EMAIL", `read -> ${block.email.latest.length} latest, status=${block.bmo.status}`);
   return c.json(block);
 });
 
