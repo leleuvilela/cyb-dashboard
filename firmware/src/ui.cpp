@@ -7,6 +7,7 @@ LV_FONT_DECLARE(font_accent_14);
 LV_FONT_DECLARE(font_accent_16);
 #define FONT_S &font_accent_14
 #define FONT_M &font_accent_16
+#define SYM_ROBOT "\xEF\x95\x84"   // FontAwesome fa-robot (U+F544)
 
 // ---- palette: Catppuccin Mocha ----
 #define COL_BG lv_color_hex(0x1e1e2e)     // base
@@ -45,7 +46,8 @@ static lv_obj_t *scr_home, *scr_mail;
 // home widgets
 static lv_obj_t *lbl_clock, *lbl_date, *lbl_wifi;
 static lv_obj_t *lbl_temp, *lbl_wdesc, *lbl_whum, *lbl_wmax, *lbl_wmin;
-static lv_obj_t *bmo_card, *lbl_bmo, *lbl_counts;
+static lv_obj_t *msg_card, *lbl_robot, *lbl_bmo;   // robot + message (hidden if no message)
+static lv_obj_t *counts_card, *lbl_counts;         // always-visible counts box
 
 // mail widgets
 static lv_obj_t *lbl_mailhdr, *email_box;
@@ -115,16 +117,18 @@ static void build_home() {
   lv_label_set_text(lbl_date, "");
   lv_obj_align(lbl_date, LV_ALIGN_TOP_LEFT, 10, 56);
 
+  // offline indicator — only shown when WiFi is down
   lbl_wifi = lv_label_create(scr_home);
   lv_obj_set_style_text_font(lbl_wifi, FONT_M, 0);
-  lv_obj_set_style_text_color(lbl_wifi, COL_MUTED, 0);
+  lv_obj_set_style_text_color(lbl_wifi, COL_URGENT, 0);
   lv_label_set_text(lbl_wifi, LV_SYMBOL_WIFI);
-  lv_obj_align(lbl_wifi, LV_ALIGN_TOP_RIGHT, -8, 6);
+  lv_obj_align(lbl_wifi, LV_ALIGN_TOP_RIGHT, -162, 10);
+  lv_obj_add_flag(lbl_wifi, LV_OBJ_FLAG_HIDDEN);
 
   lv_obj_t *wcard = lv_obj_create(scr_home);
   style_card(wcard);
   lv_obj_set_size(wcard, 150, 74);
-  lv_obj_align(wcard, LV_ALIGN_TOP_RIGHT, -6, 30);
+  lv_obj_align(wcard, LV_ALIGN_TOP_RIGHT, -6, 6);
   lv_obj_clear_flag(wcard, LV_OBJ_FLAG_SCROLLABLE);
 
   lbl_temp = lv_label_create(wcard);
@@ -159,32 +163,50 @@ static void build_home() {
   lv_label_set_text(lbl_whum, "");
   lv_obj_align(lbl_whum, LV_ALIGN_BOTTOM_RIGHT, 0, 2);
 
-  // bmo message card (clickable -> mail screen)
-  bmo_card = lv_obj_create(scr_home);
-  lv_obj_set_size(bmo_card, 304, 120);
-  lv_obj_align(bmo_card, LV_ALIGN_BOTTOM_MID, 0, -6);
-  lv_obj_set_style_radius(bmo_card, 12, 0);
-  lv_obj_set_style_border_width(bmo_card, 2, 0);
-  lv_obj_set_style_border_color(bmo_card, COL_ACCENT, 0);
-  lv_obj_set_style_bg_color(bmo_card, COL_CARD, 0);
-  lv_obj_set_style_pad_all(bmo_card, 14, 0);
-  lv_obj_clear_flag(bmo_card, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_add_flag(bmo_card, LV_OBJ_FLAG_CLICKABLE);
-  lv_obj_add_event_cb(bmo_card, open_mail, LV_EVENT_CLICKED, nullptr);
+  // ---- bmo message card: robot + scrollable message (hidden when no message) ----
+  msg_card = lv_obj_create(scr_home);
+  lv_obj_set_size(msg_card, 304, 112);
+  lv_obj_align(msg_card, LV_ALIGN_BOTTOM_MID, 0, -44);
+  lv_obj_set_style_radius(msg_card, 12, 0);
+  lv_obj_set_style_border_width(msg_card, 2, 0);
+  lv_obj_set_style_border_color(msg_card, COL_ACCENT, 0);
+  lv_obj_set_style_bg_color(msg_card, COL_CARD, 0);
+  lv_obj_set_style_pad_all(msg_card, 10, 0);
+  lv_obj_set_scroll_dir(msg_card, LV_DIR_VER);          // message scrolls if long
+  lv_obj_set_scrollbar_mode(msg_card, LV_SCROLLBAR_MODE_AUTO);
 
-  lbl_bmo = lv_label_create(bmo_card);
-  lv_obj_set_style_text_font(lbl_bmo, FONT_M, 0);
+  lbl_robot = lv_label_create(msg_card);
+  lv_obj_set_style_text_font(lbl_robot, FONT_S, 0);
+  lv_obj_set_style_text_color(lbl_robot, COL_ACCENT, 0);
+  lv_label_set_text(lbl_robot, SYM_ROBOT);
+  lv_obj_add_flag(lbl_robot, LV_OBJ_FLAG_FLOATING);    // stays put while text scrolls
+  lv_obj_align(lbl_robot, LV_ALIGN_TOP_LEFT, 0, 0);
+
+  lbl_bmo = lv_label_create(msg_card);
+  lv_obj_set_style_text_font(lbl_bmo, FONT_S, 0);       // smaller text
   lv_obj_set_style_text_color(lbl_bmo, COL_TEXT, 0);
   lv_label_set_long_mode(lbl_bmo, LV_LABEL_LONG_WRAP);
-  lv_obj_set_width(lbl_bmo, 276);
-  lv_obj_align(lbl_bmo, LV_ALIGN_TOP_LEFT, 0, 0);
-  lv_label_set_text(lbl_bmo, "A carregar...");
+  lv_obj_set_width(lbl_bmo, 250);
+  lv_obj_align(lbl_bmo, LV_ALIGN_TOP_LEFT, 26, 1);
+  lv_label_set_text(lbl_bmo, "");
 
-  lbl_counts = lv_label_create(bmo_card);
+  // ---- counts card: always visible (half width, short) ----
+  counts_card = lv_obj_create(scr_home);
+  lv_obj_set_size(counts_card, 152, 28);
+  lv_obj_align(counts_card, LV_ALIGN_BOTTOM_MID, 0, -8);
+  lv_obj_set_style_pad_all(counts_card, 4, 0);
+  lv_obj_set_style_radius(counts_card, 12, 0);
+  lv_obj_set_style_border_width(counts_card, 0, 0);
+  lv_obj_set_style_bg_color(counts_card, COL_CARD, 0);
+  lv_obj_clear_flag(counts_card, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_add_flag(counts_card, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_event_cb(counts_card, open_mail, LV_EVENT_CLICKED, nullptr);
+
+  lbl_counts = lv_label_create(counts_card);
   lv_obj_set_style_text_font(lbl_counts, FONT_S, 0);
   lv_label_set_recolor(lbl_counts, true);
   lv_label_set_text(lbl_counts, "");
-  lv_obj_align(lbl_counts, LV_ALIGN_BOTTOM_LEFT, 0, 0);
+  lv_obj_center(lbl_counts);
 }
 
 // ====================================================================
@@ -268,7 +290,8 @@ void ui_set_clock(const char *hm, const char *date) {
 }
 
 void ui_set_wifi(bool up) {
-  lv_obj_set_style_text_color(lbl_wifi, up ? COL_ACCENT : COL_MUTED, 0);
+  if (up) lv_obj_add_flag(lbl_wifi, LV_OBJ_FLAG_HIDDEN);     // hide when connected
+  else    lv_obj_clear_flag(lbl_wifi, LV_OBJ_FLAG_HIDDEN);   // show only when offline
 }
 
 static void add_email_row(const EmailItem &e) {
@@ -313,27 +336,20 @@ static void add_email_row(const EmailItem &e) {
 }
 
 void ui_set_emails(const EmailInfo &e) {
+  // counts box — always visible
   char counts[96];
   fmt_counts(counts, sizeof(counts), e);
   lv_label_set_text(lbl_counts, counts);
 
-  lv_color_t c = bmo_color(e.bmo.status.c_str());
-  lv_obj_set_style_border_color(bmo_card, c, 0);
-
-  if (e.count == 0) {
-    // no emails -> minimize the home card to a thin bar with just the counts
-    lv_obj_add_flag(lbl_bmo, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_set_height(bmo_card, 36);
-    lv_obj_set_style_pad_ver(bmo_card, 7, 0);
-    lv_obj_align(lbl_counts, LV_ALIGN_CENTER, 0, 0);
+  // message box — shown only when there is a message
+  if (e.bmo.valid && e.bmo.message.length()) {
+    lv_color_t c = bmo_color(e.bmo.status.c_str());
+    lv_obj_set_style_border_color(msg_card, c, 0);
+    lv_obj_set_style_text_color(lbl_robot, c, 0);
+    lv_label_set_text(lbl_bmo, e.bmo.message.c_str());
+    lv_obj_clear_flag(msg_card, LV_OBJ_FLAG_HIDDEN);
   } else {
-    // emails present -> full card with the bmo message + counts at the bottom
-    lv_obj_clear_flag(lbl_bmo, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_set_height(bmo_card, 120);
-    lv_obj_set_style_pad_ver(bmo_card, 14, 0);
-    lv_obj_align(lbl_counts, LV_ALIGN_BOTTOM_LEFT, 0, 0);
-    if (e.bmo.valid && e.bmo.message.length())
-      lv_label_set_text(lbl_bmo, e.bmo.message.c_str());
+    lv_obj_add_flag(msg_card, LV_OBJ_FLAG_HIDDEN);
   }
 
   // mail screen: header + list (unchanged)

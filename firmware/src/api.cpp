@@ -51,6 +51,11 @@ EmailInfo api_fetch_emails() {
     return mock_emails(++seed);   // rotate so manual refresh visibly changes
 }
 
+EmailInfo api_request_refresh() {
+    static int seed = 1000;
+    return mock_emails(++seed);   // mock: same as fetch, just rotates
+}
+
 EmailInfo api_mark_all_read() {
     EmailInfo e;
     e.valid = true;
@@ -152,20 +157,20 @@ EmailInfo api_fetch_emails() {
     return parse_email_block(doc.as<JsonObject>());
 }
 
-EmailInfo api_mark_all_read() {
+// POST (empty body) to url, parse the returned email block. Logged under tag.
+static EmailInfo http_post_block(const char *tag, const String &url) {
     EmailInfo e;
     if (WiFi.status() != WL_CONNECTED) {
-        LOGW("EMAIL", "skip mark-read — WiFi down");
+        LOGW(tag, "skip — WiFi down");
         return e;
     }
-    String url = String(API_BASE) + "/emails/read";
-    LOGD("EMAIL", "POST %s", url.c_str());
+    LOGD(tag, "POST %s", url.c_str());
     HTTPClient http;
     http.begin(url);
     http.setTimeout(8000);
     int code = http.POST((uint8_t *)nullptr, 0);
     if (code != 200) {
-        LOGE("EMAIL", "mark-read HTTP %d (%s)", code, http.errorToString(code).c_str());
+        LOGE(tag, "HTTP %d (%s)", code, http.errorToString(code).c_str());
         http.end();
         return e;
     }
@@ -173,9 +178,17 @@ EmailInfo api_mark_all_read() {
     DeserializationError err = deserializeJson(doc, http.getStream());
     http.end();
     if (err) {
-        LOGE("EMAIL", "mark-read JSON parse: %s", err.c_str());
+        LOGE(tag, "JSON parse: %s", err.c_str());
         return e;
     }
     return parse_email_block(doc.as<JsonObject>());
+}
+
+EmailInfo api_mark_all_read() {
+    return http_post_block("EMAIL", String(API_BASE) + "/emails/read");
+}
+
+EmailInfo api_request_refresh() {
+    return http_post_block("EMAIL", String(API_BASE) + "/emails/refresh");
 }
 #endif

@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { getWeather } from "./weather";
-import { getEmailBlock, markAllRead } from "./email";
+import { getEmailBlock, markAllRead, requestRefresh } from "./email";
 import { log, requestLogger } from "./logger";
 
 const app = new Hono();
@@ -18,6 +18,13 @@ app.get("/health", (c) => c.json({ ok: true }));
 app.get("/emails", async (c) => {
   const block = await getEmailBlock();
   log.info("EMAIL", `manual refresh -> ${block.email.latest.length} latest, status=${block.bmo.status}`);
+  return c.json(block);
+});
+
+// Refresh — queue a re-triage action (refresh.json) and return current state.
+app.post("/emails/refresh", async (c) => {
+  const block = await requestRefresh();
+  log.info("EMAIL", `refresh requested -> status=${block.bmo.status}`);
   return c.json(block);
 });
 

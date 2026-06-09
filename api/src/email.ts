@@ -35,13 +35,18 @@ type HermesDashboardState = Partial<EmailBlock> & {
   last_updated?: string;
 };
 
-type DashboardAction = {
-  type: "mark_read";
-  created_at: string;
-  scope: "dashboard_important";
-  email_count: number;
-  subjects: string[];
-};
+type DashboardAction =
+  | {
+      type: "mark_read";
+      created_at: string;
+      scope: "dashboard_important";
+      email_count: number;
+      subjects: string[];
+    }
+  | {
+      type: "refresh";
+      created_at: string;
+    };
 
 const STATE_FILE = resolve(
   process.env.HERMES_DASHBOARD_STATE ?? `${homedir()}/.hermes/dashboard/state.json`,
@@ -109,7 +114,7 @@ function normalizeState(raw: HermesDashboardState): EmailBlock {
     email,
     bmo: {
       status,
-      message: cleanString(raw.bmo?.message, 140) || defaultMessage,
+      message: cleanString(raw.bmo?.message, 400) || defaultMessage,
     },
   };
 }
@@ -161,6 +166,19 @@ export async function markAllRead(): Promise<EmailBlock> {
   await writeJsonAtomic(STATE_FILE, { ...block, last_updated: new Date().toISOString() });
   log.info("EMAIL", `queued mark-read action in ${ACTIONS_DIR}`);
   return block;
+}
+
+// The ESP32 refresh (pull-to-refresh / refresh button) asks BMO/Hermes to
+// re-triage. We drop a refresh.json action for the host-side worker to consume,
+// then return whatever state currently exists so the device updates right away.
+export async function requestRefresh(): Promise<EmailBlock> {
+  const action: DashboardAction = {
+    type: "refresh",
+    created_at: new Date().toISOString(),
+  };
+  await writeJsonAtomic(join(ACTIONS_DIR, "refresh.json"), action);
+  log.info("EMAIL", `queued refresh action in ${ACTIONS_DIR}`);
+  return getEmailBlock();
 }
 
 export const dashboardStateFile = STATE_FILE;

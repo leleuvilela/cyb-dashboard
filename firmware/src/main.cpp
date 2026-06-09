@@ -15,9 +15,9 @@ static EmailInfo last_emails;   // cache, to restore on a failed manual refresh
 
 // pull-to-refresh -> refresh only the inbox via /emails route
 static void on_pull_refresh() {
-    LOGI("EMAIL", "manual refresh (pull-to-refresh)");
+    LOGI("EMAIL", "manual refresh -> request re-triage");
     ui_mail_refreshing();
-    EmailInfo e = api_fetch_emails();
+    EmailInfo e = api_request_refresh();
     if (e.valid) {
         last_emails = e;
         ui_set_emails(e);
