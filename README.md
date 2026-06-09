@@ -34,6 +34,36 @@ pio run -t upload && pio device monitor
 `GET /dashboard` → `{ weather, email, bmo }` · `GET /emails` →
 `{ email, bmo }` · `POST /emails/read`. See `firmware/src/data.h`.
 
+## Hermes/BMO integration
+The API now reads BMO's email triage state from a JSON file instead of random
+mock data. Default path:
+
+```sh
+/home/leleu/.hermes/dashboard/state.json
+```
+
+Override it with `HERMES_DASHBOARD_STATE` in `api/.env`. The expected shape is
+shown in `api/hermes-state.example.json`:
+
+```json
+{
+  "email": {
+    "important_count": 2,
+    "urgent_count": 1,
+    "latest": [
+      { "from": "BMO", "subject": "Example", "date": "09/06 10:42", "reason": "Why it matters" }
+    ]
+  },
+  "bmo": { "status": "urgent", "message": "Leleu, tem 1 email urgente." },
+  "last_updated": "2026-06-09T10:42:00.000Z"
+}
+```
+
+If the state file is missing or invalid, the ESP32 still receives a safe
+"nothing urgent" block. The `Ler todas` button acknowledges the dashboard by
+zeroing this local state file; BMO's next triage run will repopulate it if
+important unread emails still exist.
+
 ## Notes
 - ESP32 is 2.4GHz WiFi only.
 - Panel config (ST7789 + inversion/BGR/byte-swap) is documented in `firmware/platformio.ini`.

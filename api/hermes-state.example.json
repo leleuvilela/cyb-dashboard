@@ -1,0 +1,25 @@
+{
+  "email": {
+    "important_count": 2,
+    "urgent_count": 1,
+    "latest": [
+      {
+        "from": "BMO",
+        "subject": "Exemplo de email urgente",
+        "date": "09/06 10:42",
+        "reason": "Mostra como o Hermes sinaliza no CYD"
+      },
+      {
+        "from": "GitHub",
+        "subject": "cyb-dashboard precisa de atenção",
+        "date": "09/06 10:15",
+        "reason": "Projeto do dashboard"
+      }
+    ]
+  },
+  "bmo": {
+    "status": "urgent",
+    "message": "Leleu, BMO encontrou 1 email urgente para olhar agora."
+  },
+  "last_updated": "2026-06-09T10:42:00.000Z"
+}

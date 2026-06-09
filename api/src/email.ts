@@ -1,4 +1,13 @@
-// Email source — MOCK for now. Your agent will produce this shape later.
+// Email source for the CYD dashboard.
+//
+// By default this reads the state file written by Hermes/BMO at
+// ~/.hermes/dashboard/state.json. If the file does not exist yet, the API
+// falls back to a deterministic friendly "nothing urgent" state so the ESP32
+// dashboard keeps working while Hermes is offline.
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { homedir } from "node:os";
 import { log } from "./logger";
 
 export type EmailLatest = {
@@ -22,49 +31,110 @@ export type EmailBlock = {
   bmo: Bmo;
 };
 
-const POOL: EmailLatest[] = [
-  { from: "Banco", subject: "Confirmação necessária", date: "09/06 09:31", reason: "Pede ação do usuário" },
-  { from: "Linear", subject: "CYD-1 assigned to you", date: "09/06 08:50", reason: "Tarefa atribuída a ti" },
-  { from: "AWS", subject: "Billing alert: budget 80%", date: "09/06 07:12", reason: "Custo acima do esperado" },
-  { from: "Mae", subject: "liga-me quando puderes", date: "08/06 21:40", reason: "Pessoal" },
-  { from: "Vercel", subject: "Deploy succeeded", date: "08/06 19:05", reason: "Informativo" },
-  { from: "GitHub", subject: "PR #42 merged", date: "08/06 17:22", reason: "Code review pronto" },
-];
+type HermesDashboardState = Partial<EmailBlock> & {
+  last_updated?: string;
+};
 
-function shuffle<T>(a: T[]): T[] {
-  const r = [...a];
-  for (let i = r.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [r[i], r[j]] = [r[j], r[i]];
-  }
-  return r;
-}
+const STATE_FILE = resolve(
+  process.env.HERMES_DASHBOARD_STATE ?? `${homedir()}/.hermes/dashboard/state.json`,
+);
 
-// Returns the { email, bmo } block. Swap this body for your agent's output.
-export async function getEmailBlock(): Promise<EmailBlock> {
-  const latest = shuffle(POOL).slice(0, 5);
-  const urgent_count = Math.random() < 0.5 ? 1 : 0;
-  const important_count = 1 + Math.floor(Math.random() * 3);
+const MAX_ITEMS = Number(process.env.EMAIL_MAX_SHOW ?? 5);
 
-  const status: Bmo["status"] = urgent_count > 0 ? "urgent" : important_count > 0 ? "attention" : "ok";
-  const message =
-    status === "urgent"
-      ? `Leleu, tem ${urgent_count} email urgente a precisar de ação agora.`
-      : status === "attention"
-        ? `Leleu, tem ${important_count} email que parece precisar de ação hoje.`
-        : "Tudo tranquilo, nada urgente.";
-
-  log.debug("EMAIL", `mock block: imp=${important_count} urg=${urgent_count} status=${status}`);
-  // accents kept — firmware now uses a custom font with Latin-1 glyphs
-  return { email: { important_count, urgent_count, latest }, bmo: { status, message } };
-}
-
-// Mark everything as read. Swap this body for your agent's real action later.
-export async function markAllRead(): Promise<EmailBlock> {
-  // TODO: call agent / Gmail to actually mark read.
-  log.info("EMAIL", "mark all read");
+function fallbackBlock(message = "BMO ainda nao encontrou emails importantes."): EmailBlock {
   return {
     email: { important_count: 0, urgent_count: 0, latest: [] },
-    bmo: { status: "ok", message: "Tudo lido, sem pendências. 🎉".replace(" 🎉", "") },
+    bmo: { status: "ok", message },
   };
 }
+
+function asStatus(value: unknown, email: EmailBlock["email"]): Bmo["status"] {
+  if (value === "ok" || value === "attention" || value === "urgent") return value;
+  if (email.urgent_count > 0) return "urgent";
+  if (email.important_count > 0) return "attention";
+  return "ok";
+}
+
+function cleanString(value: unknown, maxLen: number): string {
+  return String(value ?? "").replace(/[\r\n\t]+/g, " ").trim().slice(0, maxLen);
+}
+
+function normalizeEmailItem(item: unknown): EmailLatest | null {
+  if (!item || typeof item !== "object") return null;
+  const record = item as Record<string, unknown>;
+  const subject = cleanString(record.subject, 96);
+  const from = cleanString(record.from, 48);
+  if (!subject && !from) return null;
+  return {
+    from: from || "Email",
+    subject: subject || "Sem assunto",
+    date: cleanString(record.date, 24),
+    reason: cleanString(record.reason, 96),
+  };
+}
+
+function normalizeState(raw: HermesDashboardState): EmailBlock {
+  const rawEmail = raw.email ?? {};
+  const latest = Array.isArray(rawEmail.latest)
+    ? rawEmail.latest.map(normalizeEmailItem).filter((x): x is EmailLatest => Boolean(x)).slice(0, MAX_ITEMS)
+    : [];
+
+  const email = {
+    important_count: Math.max(0, Number(rawEmail.important_count ?? latest.length) || 0),
+    urgent_count: Math.max(0, Number(rawEmail.urgent_count ?? 0) || 0),
+    latest,
+  };
+
+  const status = asStatus(raw.bmo?.status, email);
+  const defaultMessage =
+    status === "urgent"
+      ? `Leleu, tem ${email.urgent_count} email urgente.`
+      : status === "attention"
+        ? `Leleu, tem ${email.important_count} email importante.`
+        : "Tudo tranquilo, nada urgente.";
+
+  return {
+    email,
+    bmo: {
+      status,
+      message: cleanString(raw.bmo?.message, 140) || defaultMessage,
+    },
+  };
+}
+
+// Returns the { email, bmo } block generated by Hermes/BMO.
+export async function getEmailBlock(): Promise<EmailBlock> {
+  if (!existsSync(STATE_FILE)) {
+    log.info("EMAIL", `state file missing: ${STATE_FILE}`);
+    return fallbackBlock();
+  }
+
+  try {
+    const raw = JSON.parse(await readFile(STATE_FILE, "utf8")) as HermesDashboardState;
+    const block = normalizeState(raw);
+    log.debug(
+      "EMAIL",
+      `state file: imp=${block.email.important_count} urg=${block.email.urgent_count} status=${block.bmo.status}`,
+    );
+    return block;
+  } catch (err) {
+    log.error("EMAIL", `failed to read ${STATE_FILE}`, err);
+    return fallbackBlock("BMO nao conseguiu ler o estado dos emails.");
+  }
+}
+
+// The ESP32's "Ler todas" button cannot safely mark Gmail directly. Instead it
+// acknowledges the dashboard by zeroing the local state. Hermes's next triage run
+// will repopulate it if there are still important unread emails.
+export async function markAllRead(): Promise<EmailBlock> {
+  const block = fallbackBlock("Tudo lido no dashboard. BMO vai verificar de novo em breve.");
+  const payload = JSON.stringify({ ...block, last_updated: new Date().toISOString() }, null, 2);
+  const tmp = `${STATE_FILE}.tmp`;
+  await mkdir(dirname(STATE_FILE), { recursive: true });
+  await writeFile(tmp, payload, "utf8");
+  await rename(tmp, STATE_FILE);
+  log.info("EMAIL", `acknowledged dashboard emails in ${dirname(STATE_FILE)}`);
+  return block;
+}
+
+export const dashboardStateFile = STATE_FILE;
