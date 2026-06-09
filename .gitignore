@@ -1,0 +1,21 @@
+# secrets / local config (copy config.example.h -> config.h)
+firmware/include/config.h
+api/.env
+
+# PlatformIO
+firmware/.pio/
+.pio/
+
+# Node / Bun
+node_modules/
+api/node_modules/
+
+# font build inputs (regenerate via tools/README.md; the .c outputs are committed)
+firmware/tools/*.ttf
+firmware/tools/*.woff
+
+# OS / editor
+.DS_Store
+*.swp
+.vscode/
+.idea/
